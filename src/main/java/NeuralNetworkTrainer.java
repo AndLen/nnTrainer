@@ -19,7 +19,7 @@ public class NeuralNetworkTrainer {
     public static final int OUTPUT_NODES = 2;
     public static final double TRAINING_PROPORTION = 0.7;
     private static final String DIR = "C:\\Users\\Andrew\\Documents\\Uni 2015\\NWEN 404\\csvs\\";
-    private static final String LEVEL_NAME = "level3";
+    private static final String LEVEL_NAME = "level2";
     public static final String CSV = DIR + LEVEL_NAME + ".csv";
     public static final String CSV_VALIDATION = DIR + LEVEL_NAME + "Val.csv";
     public static String FILENAME = DIR + LEVEL_NAME + "Best";
@@ -36,8 +36,8 @@ public class NeuralNetworkTrainer {
         final BasicNetwork BASE_NETWORK = new BasicNetwork();
         BASE_NETWORK.addLayer(new BasicLayer(new ActivationSigmoid(), false, numBSSIDs));
         int hiddenNodes = (int) ((numBSSIDs + OUTPUT_NODES) * (15 / 3.0));
-        BASE_NETWORK.addLayer(new BasicLayer(new ActivationSigmoid(), true , hiddenNodes));
-        BASE_NETWORK.addLayer(new BasicLayer(new ActivationLinear(), true , OUTPUT_NODES));
+        BASE_NETWORK.addLayer(new BasicLayer(new ActivationSigmoid(), true, hiddenNodes));
+        BASE_NETWORK.addLayer(new BasicLayer(new ActivationLinear(), true, OUTPUT_NODES));
         BASE_NETWORK.getStructure().finalizeStructure();
 
         MLDataSet trainingSet = convertToDataSet(trainingSamples, "Training");
@@ -103,11 +103,13 @@ public class NeuralNetworkTrainer {
             Double y = Double.parseDouble(vals[1]);
             String bssid = vals[2];
             Double frequency = Double.parseDouble(vals[3]);
-            List<Double> rssiReadings = new ArrayList<>();
-            for (int i = 4; i < vals.length; i++) {
-                rssiReadings.add(Double.parseDouble(vals[i]));
+            if (frequency > 3000) {
+                List<Double> rssiReadings = new ArrayList<>();
+                for (int i = 4; i < vals.length; i++) {
+                    rssiReadings.add(Double.parseDouble(vals[i]));
+                }
+                classifiedSamples.add(new ClassifiedSample(new ClassifiedSample.SampleLocation(x, y), bssid, frequency, rssiReadings));
             }
-            classifiedSamples.add(new ClassifiedSample(new ClassifiedSample.SampleLocation(x, y), bssid, frequency, rssiReadings));
         }
         return classifiedSamples;
     }
