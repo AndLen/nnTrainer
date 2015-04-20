@@ -19,27 +19,31 @@ public class NeuralNetworkTrainer {
     public static final int OUTPUT_NODES = 2;
     public static final double TRAINING_PROPORTION = 0.7;
     private static final String DIR = "C:\\Users\\Andrew\\Documents\\Uni 2015\\NWEN 404\\csvs\\";
-    private static final String LEVEL_NAME = "level2";
+    private static final String LEVEL_NAME = "level3";
     public static final String CSV = DIR + LEVEL_NAME + ".csv";
+    public static final String CSV_VALIDATION = DIR + LEVEL_NAME + "Val.csv";
     public static String FILENAME = DIR + LEVEL_NAME + "Best";
     public static String META_FILENAME = LEVEL_NAME + "BestMeta";
 
     private static int nextBSSID = 0;
     private Map<String, Integer> bssidToInputNodeIndex;
 
-    public NeuralNetworkTrainer(List<ClassifiedSample> trainingSample) {
+    public NeuralNetworkTrainer(List<ClassifiedSample> trainingSamples, List<ClassifiedSample> validationSamples) {
         //Not efficient but who cares, this isn't the slow part of training!
-        bssidToInputNodeIndex = assignAllBSSIDsToIDs(trainingSample);
+        //Only assign the training sample ids -- val set shouldn't affect./
+        bssidToInputNodeIndex = assignAllBSSIDsToIDs(trainingSamples);
         int numBSSIDs = bssidToInputNodeIndex.size();
         final BasicNetwork BASE_NETWORK = new BasicNetwork();
         BASE_NETWORK.addLayer(new BasicLayer(new ActivationSigmoid(), false, numBSSIDs));
-        int hiddenNodes = (int) ((numBSSIDs + 2) * (2 / 3.0));
-        BASE_NETWORK.addLayer(new BasicLayer(new ActivationSigmoid(), true, hiddenNodes));
-        BASE_NETWORK.addLayer(new BasicLayer(new ActivationLinear(), true, OUTPUT_NODES));
+        int hiddenNodes = (int) ((numBSSIDs + OUTPUT_NODES) * (15 / 3.0));
+        BASE_NETWORK.addLayer(new BasicLayer(new ActivationSigmoid(), true , hiddenNodes));
+        BASE_NETWORK.addLayer(new BasicLayer(new ActivationLinear(), true , OUTPUT_NODES));
         BASE_NETWORK.getStructure().finalizeStructure();
-        MLDataSet[] dataSets = getDataSets(trainingSample);
-        MLDataSet trainingSet = dataSets[0];
-        MLDataSet validationSet = dataSets[1];
+
+        MLDataSet trainingSet = convertToDataSet(trainingSamples, "Training");
+        MLDataSet validationSet = convertToDataSet(validationSamples, "Validation");
+        System.out.printf("%d total samples, %d in training, %d in validation\n%d inputs and %d outputs to NN\n", trainingSet.size() + validationSet.size(), trainingSet.size(), validationSet.size(), trainingSet.getInputSize(), trainingSet.getIdealSize());
+
         BasicNetwork bestOverallNetwork = null;
         double bestOverallError = Double.MAX_VALUE;
         long samples = trainingSet.getRecordCount();
@@ -60,13 +64,13 @@ public class NeuralNetworkTrainer {
         sb.append(String.format("Avg error was: %f\n", totalError / 100));
         sb.append(String.format("Best overall network had  error of: %f/%f\n", bestOverallError, findOverallError(bestOverallNetwork, validationSet, trainingSet)));
         sb.append("Val Set Performance:\n");
-        compareOutputs(validationSet, bestOverallNetwork,sb);
+        compareOutputs(validationSet, bestOverallNetwork, sb);
         sb.append("Training Set Performance:\n");
-        compareOutputs(trainingSet, bestOverallNetwork,sb);
+        compareOutputs(trainingSet, bestOverallNetwork, sb);
         System.out.print(sb.toString());
         EncogDirectoryPersistence.saveObject(new File(FILENAME + bestOverallError + ".nn"), bestOverallNetwork);
         writeObjectToFile(bssidToInputNodeIndex, META_FILENAME + bestOverallError + ".dat");
-        writeObjectToFile(sb.toString(),META_FILENAME + bestOverallError + ".out");
+        writeObjectToFile(sb.toString(), META_FILENAME + bestOverallError + ".out");
 
     }
 
@@ -85,7 +89,13 @@ public class NeuralNetworkTrainer {
     }
 
     public static void main(String[] args) {
-        String samples = readFromFile(CSV);
+        List<ClassifiedSample> trainingSamples = readSamples(CSV);
+        List<ClassifiedSample> validationSamples = readSamples(CSV_VALIDATION);
+        new NeuralNetworkTrainer(trainingSamples, validationSamples);
+    }
+
+    private static List<ClassifiedSample> readSamples(String file) {
+        String samples = readFromFile(file);
         List<ClassifiedSample> classifiedSamples = new ArrayList<>();
         for (String line : samples.split("\n")) {
             String[] vals = line.split(",");
@@ -99,7 +109,7 @@ public class NeuralNetworkTrainer {
             }
             classifiedSamples.add(new ClassifiedSample(new ClassifiedSample.SampleLocation(x, y), bssid, frequency, rssiReadings));
         }
-        new NeuralNetworkTrainer(classifiedSamples);
+        return classifiedSamples;
     }
 
     public static String readFromFile(String fileName) {
@@ -167,6 +177,7 @@ public class NeuralNetworkTrainer {
     private static Integer getIDForBssid(String bssid, Map<String, Integer> bssidToInputNode, boolean createIfDoesntExist) {
         Integer val = bssidToInputNode.get(bssid);
         if (val == null && createIfDoesntExist) {
+            System.out.println(bssid);
             val = nextBSSID++;
             bssidToInputNode.put(bssid, val);
         }
@@ -195,7 +206,7 @@ public class NeuralNetworkTrainer {
     private static double findOverallError(BasicNetwork network, MLDataSet validationSet, MLDataSet trainSet) {
         double validationError = network.calculateError(validationSet);
         double trainError = network.calculateError(trainSet);
-
+        //return validationError;
         return (trainError * (1 - TRAINING_PROPORTION) + validationError * TRAINING_PROPORTION);
     }
 
@@ -213,11 +224,11 @@ public class NeuralNetworkTrainer {
             double yDesired = desiredOutput[1];
             double xDiff = Math.abs(xOut - xDesired);
             double yDiff = Math.abs(yOut - yDesired);
-            double euclDistOff = Math.sqrt(xDiff*xDiff + yDiff*yDiff);
-            totalDistanceOff+=euclDistOff;
+            double euclDistOff = Math.sqrt(xDiff * xDiff + yDiff * yDiff);
+            totalDistanceOff += euclDistOff;
             sb.append(String.format("produced outputs [%.2f,%.2f], desired outputs were [%.0f,%.0f] off-by: %.2fm\n", xOut, yOut, xDesired, yDesired, euclDistOff));
         }
-        sb.append("Avg off across outputs of: ").append(totalDistanceOff/ recordCount).append("\n");
+        sb.append("Avg off across outputs of: ").append(totalDistanceOff / recordCount).append("\n");
     }
 
     private BasicNetwork train(BasicNetwork network, MLDataSet trainingSet, MLDataSet validationSet) {
@@ -245,16 +256,15 @@ public class NeuralNetworkTrainer {
     }
 
     /**
-     * @param trainingSample list of (known) samples
+     * @param samples list of (known) samples
      * @return training and validation sets (respectively)
      */
-    private BasicMLDataSet[] getDataSets(List<ClassifiedSample> trainingSample) {
+    private BasicMLDataSet convertToDataSet(List<ClassifiedSample> samples, String name) {
 
         //Get <X,Y> to <X,Y,rssi...>
-        Map<ClassifiedSample.SampleLocation, List<ClassifiedSample>> locationSamples = assignSamplesToLocations(trainingSample);
+        Map<ClassifiedSample.SampleLocation, List<ClassifiedSample>> locationSamples = assignSamplesToLocations(samples);
         int numSamples = locationSamples.size();
-        System.out.printf("Training set has %d vectors\n", numSamples);
-        int numBSSIDs = bssidToInputNodeIndex.size();
+        System.out.printf("%s set has %d vectors\n", name, numSamples);
         List<double[]> inputs = new ArrayList<>(numSamples);
         List<double[]> desiredOutputs = new ArrayList<>(numSamples);
 
@@ -267,34 +277,12 @@ public class NeuralNetworkTrainer {
             desiredOutputs.add(desiredOutput);
 
         }
-        List<Integer> indexes = new ArrayList<>(numSamples);
-        for (int i = 0; i < numSamples; i++) {
-            indexes.add(i);
-        }
-        Random rnd = new Random();
-        long seed = rnd.nextLong();
-        System.out.printf("Random seed: %d\n",seed);
-        Collections.shuffle(indexes, new Random(seed));
 
-        int numTraining = (int) (numSamples * TRAINING_PROPORTION);
-        double[][] trainingInputs = new double[numTraining][];
-        double[][] trainingOutputs = new double[numTraining][];
+        return new BasicMLDataSet(convertListToArray(inputs), convertListToArray(desiredOutputs));
+    }
 
-        for (int i = 0; i < numTraining; i++) {
-            trainingInputs[i] = inputs.get(indexes.get(i));
-            trainingOutputs[i] = desiredOutputs.get(indexes.get(i));
-        }
-
-        int numValidation = numSamples - numTraining;
-        double[][] validationInputs = new double[numValidation][];
-        double[][] validationOutputs = new double[numValidation][];
-
-        for (int i = 0; i < numValidation; i++) {
-            validationInputs[i] = inputs.get(indexes.get(i + numTraining));
-            validationOutputs[i] = desiredOutputs.get(indexes.get(i + numTraining));
-        }
-        System.out.printf("%d total samples, %d/%d in training, %d/%d in validation\n", numSamples, trainingInputs.length, trainingOutputs.length, validationInputs.length, validationOutputs.length);
-        return new BasicMLDataSet[]{new BasicMLDataSet(trainingInputs, trainingOutputs), new BasicMLDataSet(validationInputs, validationOutputs)};
+    private double[][] convertListToArray(List<double[]> list) {
+        return list.toArray(new double[list.size()][]);
     }
 
 
@@ -302,7 +290,7 @@ public class NeuralNetworkTrainer {
         Map<String, Integer> bssidToInputNodeIndex = new HashMap<>();
         for (ClassifiedSample sample : samples) {
             //Populates the ID <-> index map
-            getIDForBssid(sample.getBssid(), bssidToInputNodeIndex,true);
+            getIDForBssid(sample.getBssid(), bssidToInputNodeIndex, true);
         }
         return bssidToInputNodeIndex;
 
