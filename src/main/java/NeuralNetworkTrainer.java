@@ -18,7 +18,7 @@ import java.util.*;
 public class NeuralNetworkTrainer {
     public static final int OUTPUT_NODES = 2;
     public static final double TRAINING_PROPORTION = 0.7;
-    private static final String DIR = "C:\\Users\\Andrew\\Documents\\Uni 2015\\NWEN 404\\csvs\\";
+    private static final String DIR = "/u/students/lensenandr/nwen404/csvs/";
     private static final String LEVEL_NAME = "level2";
     public static final String CSV = DIR + LEVEL_NAME + ".csv";
     public static final String CSV_VALIDATION = DIR + LEVEL_NAME + "Val.csv";
@@ -90,11 +90,16 @@ public class NeuralNetworkTrainer {
 
     public static void main(String[] args) {
         List<ClassifiedSample> trainingSamples = readSamples(CSV);
+        List<ClassifiedSample> level3TrainingSamples = readSamples(DIR + "level3"+".csv");
+        trainingSamples.addAll(level3TrainingSamples);
         List<ClassifiedSample> validationSamples = readSamples(CSV_VALIDATION);
+        List<ClassifiedSample> level3ValidationSamples = readSamples(DIR + "level3Val.csv");
+        validationSamples.addAll(level3ValidationSamples);
         new NeuralNetworkTrainer(trainingSamples, validationSamples);
     }
 
     private static List<ClassifiedSample> readSamples(String file) {
+
         String samples = readFromFile(file);
         List<ClassifiedSample> classifiedSamples = new ArrayList<>();
         for (String line : samples.split("\n")) {
